@@ -1,5 +1,5 @@
 """
-EMA 突破策略模块
+EMA Breakthrough Strategy Module
 """
 
 import ccxt
@@ -16,11 +16,11 @@ class EMAStrategy:
     def __init__(self, notifier=None):
         self.exchange = ccxt.binance()
         self.notifier = notifier
-        # 存储上一次的价格位置，用于检测突破
+        # Store last price position to detect breakthroughs
         self.last_positions = {}
     
     def check_ema_breakthrough(self, df, ema_periods):
-        """检查 EMA 突破"""
+        """Checks for EMA breakthroughs."""
         if len(df) < 2:
             return []
         
@@ -39,84 +39,93 @@ class EMAStrategy:
             current_ema = current[ema_col]
             previous_ema = previous[ema_col]
             
-            # 检查向上突破
-            if (previous_price <= previous_ema and current_price > current_ema):
+            # Check for upward breakthrough
+            if previous_price <= previous_ema and current_price > current_ema:
                 breakthroughs.append({
-                    'type': '向上突破',
+                    'type': 'Upward',
                     'ema_period': period,
                     'price': current_price,
                     'ema_value': current_ema,
-                    'emoji': '🚀'
                 })
             
-            # 检查向下跌破
-            elif (previous_price >= previous_ema and current_price < current_ema):
+            # Check for downward breakthrough
+            elif previous_price >= previous_ema and current_price < current_ema:
                 breakthroughs.append({
-                    'type': '向下跌破',
+                    'type': 'Downward',
                     'ema_period': period,
                     'price': current_price,
                     'ema_value': current_ema,
-                    'emoji': '📉'
                 })
         
         return breakthroughs
     
     async def analyze_symbol(self, symbol, timeframe):
-        """分析单个交易对的 EMA"""
+        """Analyzes EMA for a single symbol."""
         try:
-            logger.info(f"正在分析 {symbol} 的 {timeframe} EMA 突破...")
+            logger.info(f"Analyzing EMA breakthrough for {symbol} on {timeframe}...")
             
-            # 使用配置文件中的 limit
+            # Use limit from config
             limit = TIMEFRAMES_PARAMS[timeframe]['limit']
             ohlcv = await asyncio.to_thread(self.exchange.fetch_ohlcv, symbol, timeframe, limit=limit)
             
             if not ohlcv:
-                logger.warning(f"未能获取 {symbol} 在 {timeframe} 的 OHLCV 数据。")
+                logger.warning(f"Could not fetch OHLCV data for {symbol} on {timeframe}.")
                 return
 
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             
             if df.empty or len(df) < max(EMA_PERIODS):
-                logger.warning(f"{symbol} 在 {timeframe} 的数据不足以计算 EMA。")
+                logger.warning(f"Not enough data for {symbol} on {timeframe} to calculate EMA.")
                 return
 
-            # 计算所有 EMA
+            # Calculate all EMAs
             for period in EMA_PERIODS:
                 df[f'ema_{period}'] = ta.ema(df['close'], length=period)
             
-            # 检查突破
+            # Check for breakthroughs
             breakthroughs = self.check_ema_breakthrough(df, EMA_PERIODS)
             
             if breakthroughs and self.notifier:
-                latest = df.iloc[-1]
-                
+                message_parts = []
+                # Define emoji levels based on EMA period importance
+                emoji_levels = {21: 1, 55: 2, 100: 3}
+
                 for breakthrough in breakthroughs:
-                    message = (
-                        f"{breakthrough['emoji']} EMA {breakthrough['type']} 信号 {breakthrough['emoji']}\n\n"
-                        f"交易对: {symbol}\n"
-                        f"时间框架: {timeframe}\n"
-                        f"时间: {latest['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
-                        f"当前价格: {breakthrough['price']:.2f}\n"
-                        f"EMA{breakthrough['ema_period']}: {breakthrough['ema_value']:.2f}\n"
-                        f"突破类型: {breakthrough['type']}"
-                    )
+                    base_emoji = '🚀' if breakthrough['type'] == 'Upward' else '📉'
+                    # Use .get() for safety, default to 1 emoji
+                    emoji_count = emoji_levels.get(breakthrough['ema_period'], 1)
+                    emojis = base_emoji * emoji_count
                     
-                    await self.notifier.send_message(message)
-                    logger.info(f"已发送 EMA 通知: {symbol} ({timeframe}) - EMA{breakthrough['ema_period']} {breakthrough['type']}")
+                    # Extract base currency, e.g., 'BTC' from 'BTC/USDT:USDT'
+                    base_currency = symbol.split('/')[0]
+                    
+                    # Format message lines
+                    line1 = f"{emojis} {base_currency} {timeframe} {'Breakout' if breakthrough['type'] == 'Upward' else 'Breakdown'} EMA{breakthrough['ema_period']}!"
+                    line2 = f"Price: {breakthrough['price']:.2f}, EMA{breakthrough['ema_period']}: {breakthrough['ema_value']:.2f}"
+                    
+                    message_parts.append(f"{line1}\n{line2}")
+ 
+                if message_parts:
+                    # Join all parts with a separator
+                    full_message = "\n---\n".join(message_parts)
+                    await self.notifier.send_message(full_message)
+                    logger.info(f"Sent merged EMA notification for {symbol} ({timeframe})")
 
         except ccxt.NetworkError as e:
-            logger.error(f"CCXT 网络错误 ({symbol}, {timeframe}): {e}")
+            logger.error(f"CCXT Network Error ({symbol}, {timeframe}): {e}")
         except ccxt.ExchangeError as e:
-            logger.error(f"CCXT 交易所错误 ({symbol}, {timeframe}): {e}")
+            logger.error(f"CCXT Exchange Error ({symbol}, {timeframe}): {e}")
         except Exception as e:
-            logger.error(f"分析 {symbol} ({timeframe}) EMA 时发生意外错误: {e}", exc_info=True)
+            logger.error(f"Unexpected error analyzing EMA for {symbol} ({timeframe}): {e}", exc_info=True)
     
     async def run_analysis(self):
-        """运行完整的 EMA 分析"""
-        logger.info(f"开始 EMA 突破分析任务: {datetime.now()}")
+        """Runs the complete EMA analysis."""
+        logger.info(f"Starting EMA breakthrough analysis task: {datetime.now()}")
         
         for symbol in SYMBOLS_TO_MONITOR:
             for timeframe in EMA_TIMEFRAMES:
                 await self.analyze_symbol(symbol, timeframe)
-                await asyncio.sleep(2)  # API 请求之间短暂延迟
+                await asyncio.sleep(1)  # Short delay between API requests to avoid rate limiting
+        
+        logger.info(f"EMA analysis task finished for this cycle.")
