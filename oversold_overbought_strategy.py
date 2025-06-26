@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class OversoldOverboughtStrategy:
     def __init__(self, notifier=None):
-        self.exchange = ccxt.binance()
+        self.exchange = ccxt.okx()
         self.notifier = notifier
     
     def check_market_status(self, price, rsi, bb_upper, bb_lower, macd, macd_signal):

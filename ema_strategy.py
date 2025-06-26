@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class EMAStrategy:
     def __init__(self, notifier=None):
-        self.exchange = ccxt.binance()
+        self.exchange = ccxt.okx()
         self.notifier = notifier
         # Store last price position to detect breakthroughs
         self.last_positions = {}
