@@ -154,9 +154,10 @@ class OversoldOverboughtStrategy:
                 base_currency = symbol.split('/')[0]
 
                 message = (
-                    f"{emoji} {message_type_en} ({signal_type_en}) {emoji}\n\n"
-                    f"Symbol: {base_currency}\n"
-                    f"Timeframe: {timeframe}\n"
+                    # f"{emoji} {message_type_en} ({signal_type_en}) {emoji}\n\n"
+                    f"{emoji} {base_currency} {timeframe} {message_type_en} {emoji}\n\n"
+                    # f"Symbol: {base_currency}\n"
+                    # f"Timeframe: {timeframe}\n"
                     f"Time: {latest['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
                     f"Price: {latest['close']:.2f}\n"
                     f"RSI ({params['rsi_period']}): {latest['rsi']:.2f} ({status['rsi_status']})\n"
